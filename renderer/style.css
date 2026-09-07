@@ -164,4 +164,37 @@ button.link-btn.danger { color: var(--danger); }
 .raw-text-preview { white-space: pre-wrap; font-size: 12px; color: var(--text); background: #fbf8f4; padding: 10px; border-radius: 6px; max-height: 220px; overflow-y: auto; border: 1px solid var(--panel-border); }
 .raw-text-preview mark { background: #ffe1b0; color: #6b3a00; border-radius: 2px; padding: 0 1px; }
 
+/* --- 칩 선택형 입력 (포지션 생성/수정 모달) --- */
+.chip-presets { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.chip-preset-btn {
+  background: #fffdfb; border: 1px solid var(--panel-border); color: var(--text-dim);
+  border-radius: 999px; padding: 5px 12px; font-size: 12px; cursor: pointer;
+}
+.chip-preset-btn:hover { border-color: var(--orange-soft); color: var(--orange); }
+.chip-preset-btn.selected { background: var(--orange); border-color: var(--orange); color: #fff; font-weight: 600; }
+.chip-input-row { display: flex; gap: 8px; margin-bottom: 8px; }
+.chip-input-row input { margin-top: 0; }
+.chip-input-row button { flex-shrink: 0; margin-top: 0; }
+.chip-list { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; min-height: 20px; }
+.chip {
+  display: inline-flex; align-items: center; gap: 6px; background: var(--orange-bg);
+  color: var(--orange); border: 1px solid #f0cdb2; border-radius: 999px; padding: 4px 6px 4px 12px; font-size: 12px;
+}
+.chip .chip-remove { cursor: pointer; background: none; border: none; color: var(--orange); font-size: 13px; padding: 0 4px; border-radius: 50%; }
+.chip .chip-remove:hover { background: #f0cdb2; }
+.settings-link { display: block; text-align: center; margin-top: 12px; font-size: 12px; }
+
+/* --- 이력서 AI 분석 탭 --- */
+.analysis-card { border-left: 3px solid var(--orange); }
+.fit-score-badge { display: inline-block; font-size: 20px; font-weight: 800; color: var(--orange); }
+.analysis-list { margin: 6px 0; padding-left: 18px; font-size: 12.5px; }
+.analysis-list li { margin-bottom: 3px; }
+.masked-note { font-size: 11px; color: var(--ok); background: #eaf6ea; border-radius: 4px; padding: 3px 8px; display: inline-block; margin-top: 6px; }
+
+/* --- URL 자동체크 배지 --- */
+.url-check-badge { font-size: 11px; padding: 2px 8px; border-radius: 999px; margin-left: 6px; }
+.url-check-badge.ok { background: #eaf6ea; color: #2c6b30; }
+.url-check-badge.fail { background: #fbeae7; color: #a4341f; }
+.url-check-badge.pending { background: #f0e6d8; color: var(--text-dim); }
+
 .footer { display: flex; justify-content: space-between; padding: 8px 20px; font-size: 11px; color: #a89a86; border-top: 1px solid var(--panel-border); background: #ffffff; flex-shrink: 0; }

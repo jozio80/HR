@@ -9,6 +9,9 @@ const { generateInterviewQuestions } = require('./src/interviewQuestions');
 const { generateOfferEmail, generateRejectionEmail } = require('./src/emailTemplates');
 const { generateOnboardingChecklist } = require('./src/onboardingChecklist');
 const store = require('./src/positionStore');
+const settingsStore = require('./src/settingsStore');
+const { callLLM, testConnection } = require('./src/llmClient');
+const { buildResumeAnalysisMessages, parseAnalysisResponse } = require('./src/resumeAnalysis');
 
 let mainWindow = null;
 
@@ -16,18 +19,27 @@ function getDbFilePath() {
   return path.join(app.getPath('userData'), 'positions.json');
 }
 
+function getSettingsFilePath() {
+  return path.join(app.getPath('userData'), 'settings.json');
+}
+
 /**
- * 신뢰 확보 장치: 이 앱은 렌더러/메인 어디에서도 이력서 원문이나 채용 데이터를 외부로 보내지 않는다.
- * 방어적으로, 세션 레벨에서 http/https 아웃바운드 요청 자체를 전부 차단한다.
+ * 네트워크 정책: 렌더러(UI)는 어떤 외부 요청도 직접 보낼 수 없다 (contextIsolation+nodeIntegration
+ * 비활성화 + preload가 명시적으로 허용한 IPC 채널만 노출하므로, 렌더러 층에서의 임의 네트워크 호출은
+ * 구조적으로 불가능하다). 그 위에 방어적으로 렌더러 세션의 http/https 요청을 한 번 더 차단한다.
+ * 실제 외부 호출(LLM API, 채용공고 URL 유효성 확인)은 이 차단과 무관한 main 프로세스의 Node fetch를
+ * 통해서만, 그것도 사용자가 직접 등록한 LLM 설정이나 명시적으로 입력한 URL에 대해서만, 버튼 클릭 같은
+ * 명시적 사용자 액션에 대응해서만 일어난다. 이력서 원문/분석결과 자체는 여전히 로컬 파일(positions.json)에만
+ * 저장된다 - LLM으로 나가는 건 요청 순간의 마스킹된 텍스트뿐이고(piiMasking.js), 응답도 다시 로컬에만 저장된다.
  */
-function blockAllNetworkRequests() {
+function blockRendererNetworkRequests() {
   session.defaultSession.webRequest.onBeforeRequest((details, callback) => {
     const url = details.url || '';
     if (url.startsWith('file:') || url.startsWith('devtools:') || url.startsWith('data:')) {
       callback({ cancel: false });
       return;
     }
-    console.warn('[호롱랩스] 네트워크 요청 차단됨:', url);
+    console.warn('[호롱랩스] 렌더러의 직접 네트워크 요청 차단됨:', url);
     callback({ cancel: true });
   });
 }
@@ -50,7 +62,7 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
-  blockAllNetworkRequests();
+  blockRendererNetworkRequests();
   createWindow();
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
@@ -261,4 +273,70 @@ ipcMain.handle('generate-onboarding-checklist', async (_event, positionId) => {
 
 ipcMain.handle('toggle-onboarding-item', async (_event, { positionId, itemKey }) => {
   return store.updatePosition(getDbFilePath(), positionId, (p) => store.toggleOnboardingItem(p, itemKey));
+});
+
+// --- 설정 (LLM 연결 정보, 사용자 본인 키 등록) ---
+
+ipcMain.handle('get-settings', async () => {
+  return settingsStore.readSettings(getSettingsFilePath());
+});
+
+ipcMain.handle('save-llm-settings', async (_event, llmFields) => {
+  return settingsStore.updateLLMSettings(getSettingsFilePath(), llmFields);
+});
+
+ipcMain.handle('test-llm-connection', async () => {
+  const settings = await settingsStore.readSettings(getSettingsFilePath());
+  return testConnection(settings.llm);
+});
+
+// --- 이력서 AI 분석 (LLM 호출, 개인정보는 반드시 마스킹 후 전송) ---
+
+ipcMain.handle('analyze-candidate', async (_event, { positionId, candidateId }) => {
+  const settings = await settingsStore.readSettings(getSettingsFilePath());
+  if (!settings.llm.apiKey) {
+    throw new Error('LLM API 키가 등록되어 있지 않습니다. 설정에서 먼저 등록해주세요.');
+  }
+  const position = await store.getPosition(getDbFilePath(), positionId);
+  if (!position) throw new Error('포지션을 찾을 수 없습니다');
+  const candidate = position.candidates.find((c) => c.id === candidateId);
+  if (!candidate) throw new Error('지원자를 찾을 수 없습니다');
+  if (!candidate.filePath) throw new Error('원문 파일 경로가 없어 분석할 수 없습니다');
+
+  const { text } = await extractFromFile(candidate.filePath);
+  const jd = { title: position.title, requiredSkills: position.requiredSkills, preferredSkills: position.preferredSkills, minYears: position.minYears };
+  const { messages, maskedFields } = buildResumeAnalysisMessages(jd, text);
+  const raw = await callLLM(settings.llm, messages);
+  const analysis = { ...parseAnalysisResponse(raw), maskedFields, analyzedAt: new Date().toISOString() };
+  return store.updatePosition(getDbFilePath(), positionId, (p) => store.setCandidateAnalysis(p, candidateId, analysis));
+});
+
+// --- 채용공고 URL 자동 유효성 확인 (사이트를 담지 않고, 링크가 살아있는지만 HEAD/GET으로 확인) ---
+
+ipcMain.handle('check-url-reachable', async (_event, url) => {
+  if (!url) return { reachable: false, error: 'URL이 비어있습니다' };
+  let parsed;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return { reachable: false, error: '올바른 URL 형식이 아닙니다' };
+  }
+  if (!['http:', 'https:'].includes(parsed.protocol)) {
+    return { reachable: false, error: 'http/https URL만 확인할 수 있습니다' };
+  }
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 8000);
+  try {
+    let res;
+    try {
+      res = await fetch(url, { method: 'HEAD', redirect: 'follow', signal: controller.signal });
+    } catch {
+      res = await fetch(url, { method: 'GET', redirect: 'follow', signal: controller.signal }); // HEAD를 막아둔 사이트 대응
+    }
+    return { reachable: res.ok, status: res.status };
+  } catch (err) {
+    return { reachable: false, error: err.message };
+  } finally {
+    clearTimeout(timer);
+  }
 });

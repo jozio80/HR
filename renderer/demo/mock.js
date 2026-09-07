@@ -124,4 +124,47 @@ window.horong = {
   async toggleOnboardingItem(positionId, itemKey) {
     return updatePositionSync(positionId, (p) => window.HorongStore.toggleOnboardingItem(p, itemKey));
   },
+
+  // --- 설정 (LLM), 미리보기에서는 인메모리에만 저장 ---
+  async getSettings() {
+    if (!window.__SETTINGS__) window.__SETTINGS__ = { llm: { provider: 'openai', apiKey: '', baseUrl: '', model: 'gpt-4o-mini' } };
+    return window.__SETTINGS__;
+  },
+  async saveLLMSettings(fields) {
+    const current = await this.getSettings();
+    window.__SETTINGS__ = { ...current, llm: { ...current.llm, ...fields } };
+    return window.__SETTINGS__;
+  },
+  async testLLMConnection() {
+    const settings = await this.getSettings();
+    if (!settings.llm.apiKey) return { ok: false, error: 'LLM API 키가 등록되어 있지 않습니다. 설정에서 먼저 등록해주세요.' };
+    await new Promise((r) => setTimeout(r, 400));
+    return { ok: true, reply: '(미리보기 모드 - 실제 호출 없이 성공으로 표시)' };
+  },
+
+  // --- 이력서 AI 분석: 미리보기에서는 실제 LLM을 호출하지 않고 마스킹 로직만 실제로 태워서 확인용 결과를 만든다 ---
+  async analyzeCandidate(positionId, candidateId) {
+    const position = getPositionSync(positionId);
+    const candidate = position.candidates.find((c) => c.id === candidateId);
+    const resume = window.__SAMPLE_RESUMES__.find((r) => r.fileName === candidate.fileName);
+    await new Promise((r) => setTimeout(r, 600));
+    const analysis = {
+      fitScore: candidate.score,
+      summary: `(미리보기) ${candidate.candidateName || candidate.fileName}님은 규칙기반 점수 ${candidate.score}점입니다. 실제 앱에서는 이 부분이 등록하신 LLM의 실제 분석 결과로 채워집니다.`,
+      strengths: candidate.matchedRequired.map((s) => `${s} 실무 경험 보유`),
+      concerns: candidate.missingRequired.map((s) => `${s} 경험 확인 필요`),
+      recommendedQuestions: ['실제 프로젝트에서 어떤 역할을 맡았는지 설명해주세요.'],
+      maskedFields: ['name', 'email', 'phone'],
+      analyzedAt: new Date().toISOString(),
+    };
+    return updatePositionSync(positionId, (p) => window.HorongStore.setCandidateAnalysis(p, candidateId, analysis));
+  },
+
+  // --- URL 자동확인: 미리보기에서는 실제 네트워크 없이 URL 형태로만 판정 ---
+  async checkUrlReachable(url) {
+    await new Promise((r) => setTimeout(r, 500));
+    if (!url || !/^https?:\/\//.test(url)) return { reachable: false, error: '올바른 URL 형식이 아닙니다' };
+    if (url.includes('broken')) return { reachable: false, status: 404 };
+    return { reachable: true, status: 200 };
+  },
 };

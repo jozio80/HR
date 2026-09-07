@@ -67,6 +67,17 @@ test('editPositionFields는 JD 필드만 교체하고 나머지는 유지한다'
   assert.equal(edited.minYears, 3); // 안 건드린 필드는 유지
 });
 
+test('setCandidateAnalysis는 해당 후보자에만 AI 분석 결과를 저장한다', () => {
+  let p = store.createPositionObject({ title: 'X' });
+  p = store.addCandidates(p, [{ fileName: 'a.pdf', score: 80 }, { fileName: 'b.pdf', score: 70 }]);
+  const [a, b] = p.candidates;
+  p = store.setCandidateAnalysis(p, a.id, { fitScore: 90, summary: '적합' });
+  const updatedA = p.candidates.find((c) => c.id === a.id);
+  const updatedB = p.candidates.find((c) => c.id === b.id);
+  assert.equal(updatedA.aiAnalysis.fitScore, 90);
+  assert.equal(updatedB.aiAnalysis, undefined);
+});
+
 test('toggleOnboardingItem은 체크/언체크를 토글한다', () => {
   let p = store.createPositionObject({ title: 'X' });
   p = store.toggleOnboardingItem(p, 'firstDay:0');

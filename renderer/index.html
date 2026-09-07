@@ -16,9 +16,10 @@
           <p class="tagline">채용 워크스페이스</p>
         </div>
       </div>
-      <div class="privacy-badge-mini"><span class="dot"></span> 100% 로컬 처리 · 네트워크 전송 없음</div>
+      <div class="privacy-badge-mini"><span class="dot"></span> 이력서·분석결과는 이 PC에만 저장 · AI분석은 마스킹 후 본인 LLM에만 전송</div>
       <button id="btn-new-position" class="primary full-width">+ 새 포지션</button>
       <div id="position-list" class="position-list"></div>
+      <button id="btn-open-settings" class="link-btn settings-link">⚙ LLM 설정</button>
     </aside>
 
     <main class="main-area">
@@ -39,15 +40,19 @@
         </header>
 
         <nav class="tabs" id="tab-nav">
-          <button class="tab-btn active" data-tab="sourcing">1. 소싱</button>
-          <button class="tab-btn" data-tab="screening">2. 서류스크리닝</button>
-          <button class="tab-btn" data-tab="interview">3. 면접</button>
-          <button class="tab-btn" data-tab="offer">4. 합격통보</button>
-          <button class="tab-btn" data-tab="onboarding">5. 온보딩</button>
+          <button class="tab-btn active" data-tab="jobpost">1. 채용공고 등록</button>
+          <button class="tab-btn" data-tab="sourcing">2. 채용풀 소싱</button>
+          <button class="tab-btn" data-tab="screening">3. 서류스크리닝</button>
+          <button class="tab-btn" data-tab="analysis">4. 이력서 분석 (AI)</button>
+          <button class="tab-btn" data-tab="interview">5. 면접</button>
+          <button class="tab-btn" data-tab="offer">6. 합격통보</button>
+          <button class="tab-btn" data-tab="onboarding">7. 온보딩</button>
         </nav>
 
-        <section id="tab-sourcing" class="tab-panel"></section>
+        <section id="tab-jobpost" class="tab-panel"></section>
+        <section id="tab-sourcing" class="tab-panel hidden"></section>
         <section id="tab-screening" class="tab-panel hidden"></section>
+        <section id="tab-analysis" class="tab-panel hidden"></section>
         <section id="tab-interview" class="tab-panel hidden"></section>
         <section id="tab-offer" class="tab-panel hidden"></section>
         <section id="tab-onboarding" class="tab-panel hidden"></section>
@@ -59,19 +64,82 @@
     <div class="modal-content">
       <button id="btn-close-position-modal" class="close-btn">✕</button>
       <h3 id="position-modal-title">새 포지션</h3>
-      <label>직무명
-        <input id="pm-title" type="text" placeholder="예: 백엔드 개발자 (3년 이상)" />
+      <label>직무명 <span class="hint">(목록에서 선택하거나 직접 입력)</span>
+        <input id="pm-title" type="text" list="job-title-suggestions" placeholder="선택 또는 직접 입력" />
       </label>
-      <label>필수 스킬 / 키워드 <span class="hint">(쉼표로 구분)</span>
-        <textarea id="pm-required" rows="2" placeholder="예: Java, Spring Boot, MySQL"></textarea>
+      <label>필수 스킬 <span class="hint">(태그 클릭으로 바로 추가)</span></label>
+      <div id="pm-required-presets" class="chip-presets"></div>
+      <div class="chip-input-row">
+        <input id="pm-required-input" type="text" list="skill-suggestions" placeholder="목록에 없으면 직접 입력 후 Enter" />
+        <button id="pm-required-add" type="button" class="secondary">추가</button>
+      </div>
+      <div id="pm-required-chips" class="chip-list"></div>
+
+      <label style="margin-top:14px">우대 스킬 <span class="hint">(태그 클릭으로 바로 추가)</span></label>
+      <div id="pm-preferred-presets" class="chip-presets"></div>
+      <div class="chip-input-row">
+        <input id="pm-preferred-input" type="text" list="skill-suggestions" placeholder="목록에 없으면 직접 입력 후 Enter" />
+        <button id="pm-preferred-add" type="button" class="secondary">추가</button>
+      </div>
+      <div id="pm-preferred-chips" class="chip-list"></div>
+
+      <label style="margin-top:14px">최소 경력 연차 <span class="hint">(선택)</span></label>
+      <div id="pm-years-presets" class="chip-presets"></div>
+
+      <datalist id="job-title-suggestions">
+        <option value="백엔드 개발자">
+        <option value="프론트엔드 개발자">
+        <option value="풀스택 개발자">
+        <option value="모바일(iOS/Android) 개발자">
+        <option value="데이터 엔지니어">
+        <option value="DevOps/인프라 엔지니어">
+        <option value="QA 엔지니어">
+        <option value="기획자/PM">
+        <option value="디자이너 (UI/UX)">
+        <option value="마케터">
+        <option value="영업">
+        <option value="인사담당자">
+        <option value="회계/재무">
+        <option value="고객지원">
+      </datalist>
+      <datalist id="skill-suggestions">
+        <option value="Java"><option value="Python"><option value="JavaScript"><option value="TypeScript">
+        <option value="React"><option value="Vue"><option value="Node.js"><option value="Spring Boot">
+        <option value="MySQL"><option value="PostgreSQL"><option value="MongoDB"><option value="AWS">
+        <option value="Docker"><option value="Kubernetes"><option value="Kafka"><option value="Git">
+        <option value="Figma"><option value="SQL"><option value="Excel"><option value="영어 비즐니스회화">
+      </datalist>
+
+      <button id="btn-save-position" class="primary full-width" style="margin-top:14px">저장</button>
+    </div>
+  </div>
+
+  <div id="settings-modal" class="modal hidden">
+    <div class="modal-content">
+      <button id="btn-close-settings-modal" class="close-btn">✕</button>
+      <h3>LLM 설정</h3>
+      <p class="hint">이력서 AI 분석을 쓰려면 본인의 LLM API 키를 등록해야 합니다. 키는 이 PC에만 저장되고, 분석 요청 시 이력서의 개인정보(이름/연락처)는 마스킹 후 전송됩니다.</p>
+      <label>제공자
+        <select id="settings-provider">
+          <option value="openai">OpenAI (GPT)</option>
+          <option value="anthropic">Anthropic (Claude)</option>
+          <option value="openai-compatible">OpenAI 호환 엔드포인트 (직접 입력)</option>
+        </select>
       </label>
-      <label>우대 스킬 / 키워드 <span class="hint">(쉼표로 구분)</span>
-        <textarea id="pm-preferred" rows="2" placeholder="예: AWS, Kafka"></textarea>
+      <label id="settings-baseurl-row">API 엔드포인트 (선택, 비워두면 기본값 사용)
+        <input id="settings-baseurl" type="text" placeholder="예: https://api.openai.com/v1" />
       </label>
-      <label>최소 경력 연차
-        <input id="pm-years" type="number" min="0" max="30" placeholder="예: 3" />
+      <label>API 키
+        <input id="settings-apikey" type="text" placeholder="sk-..." autocomplete="off" />
       </label>
-      <button id="btn-save-position" class="primary full-width">저장</button>
+      <label>모델명
+        <input id="settings-model" type="text" placeholder="예: gpt-4o-mini, claude-3-5-sonnet-latest" />
+      </label>
+      <div class="jd-actions">
+        <button id="btn-test-llm" class="secondary">연결 테스트</button>
+        <button id="btn-save-settings" class="primary">저장</button>
+      </div>
+      <p id="settings-status" class="status"></p>
     </div>
   </div>
 
@@ -84,8 +152,8 @@
   </div>
 
   <footer class="footer">
-    <span>호롱랩스 v0.3.0 (프로토타입)</span>
-    <span>채점/생성 로직은 전부 규칙 기반이며, 최종 채용 판단은 반드시 사람이 검토해야 합니다.</span>
+    <span>호롱랩스 v0.4.0 (프로토타입)</span>
+    <span>규칙기반 채점은 즉시·무료, AI 분석은 개인정보 마스킹 후 본인 LLM 호출(비용발생) · 최종 채용 판단은 반드시 사람이 검토해야 합니다.</span>
   </footer>
 
   <script src="app.js"></script>

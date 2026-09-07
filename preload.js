@@ -38,4 +38,15 @@ contextBridge.exposeInMainWorld('horong', {
   // 5. 온보딩
   generateOnboardingChecklist: (positionId) => ipcRenderer.invoke('generate-onboarding-checklist', positionId),
   toggleOnboardingItem: (positionId, itemKey) => ipcRenderer.invoke('toggle-onboarding-item', { positionId, itemKey }),
+
+  // 설정 (LLM 연결)
+  getSettings: () => ipcRenderer.invoke('get-settings'),
+  saveLLMSettings: (llmFields) => ipcRenderer.invoke('save-llm-settings', llmFields),
+  testLLMConnection: () => ipcRenderer.invoke('test-llm-connection'),
+
+  // 이력서 AI 분석
+  analyzeCandidate: (positionId, candidateId) => ipcRenderer.invoke('analyze-candidate', { positionId, candidateId }),
+
+  // 채용공고 URL 자동체크
+  checkUrlReachable: (url) => ipcRenderer.invoke('check-url-reachable', url),
 });

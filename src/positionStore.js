@@ -66,6 +66,12 @@ function setInterviewResult(position, candidateId, result) {
   return { ...position, candidates };
 }
 
+/** LLM 기반 이력서 AI 분석 결과를 후보자에 저장한다. */
+function setCandidateAnalysis(position, candidateId, analysis) {
+  const candidates = position.candidates.map((c) => (c.id === candidateId ? { ...c, aiAnalysis: analysis } : c));
+  return { ...position, candidates };
+}
+
 /** JD 핵심 필드(직무명/필수·우대스킬/최소연차)만 교체한다. 나머지(소싱/지원자/면접/온보딩)는 그대로 유지. */
 function editPositionFields(position, fields) {
   return {
@@ -167,6 +173,7 @@ module.exports = {
   setCandidateStage,
   setCandidateNote,
   setInterviewResult,
+  setCandidateAnalysis,
   editPositionFields,
   updateSourcing,
   setInterviewQuestions,

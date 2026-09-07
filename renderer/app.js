@@ -3,11 +3,28 @@
 const state = {
   positions: [],
   currentPosition: null, // 서버(main)에서 받아온 전체 position 객체
-  activeTab: 'sourcing',
+  activeTab: 'jobpost',
   selectedFiles: [],
   editingPositionId: null, // null이면 "새 포지션" 모드
   companyName: '',
+  pmRequiredSkills: [],
+  pmPreferredSkills: [],
+  pmMinYears: null,
+  settings: null,
+  urlCheckResults: {}, // { "channelName": { reachable, status, error } }
 };
+
+const COMMON_SKILLS = ['Java', 'Python', 'JavaScript', 'TypeScript', 'React', 'Node.js', 'Spring Boot', 'MySQL', 'AWS', 'Docker', 'Kubernetes', 'Git', 'SQL', 'Excel', 'Figma', '기획력', '커뮤니케이션'];
+const MIN_YEARS_PRESETS = [
+  { label: '무관', value: null },
+  { label: '0년(신입)', value: 0 },
+  { label: '1년+', value: 1 },
+  { label: '2년+', value: 2 },
+  { label: '3년+', value: 3 },
+  { label: '5년+', value: 5 },
+  { label: '7년+', value: 7 },
+  { label: '10년+', value: 10 },
+];
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -52,7 +69,7 @@ async function refreshPositionList() {
 
 async function selectPosition(id) {
   state.currentPosition = await window.horong.getPosition(id);
-  state.activeTab = 'sourcing';
+  state.activeTab = 'jobpost';
   await refreshPositionList();
   renderPositionView();
 }
@@ -77,8 +94,10 @@ function renderPositionView() {
     panel.classList.toggle('hidden', panel.id !== `tab-${state.activeTab}`);
   });
 
+  renderJobPostTab();
   renderSourcingTab();
   renderScreeningTab();
+  renderAnalysisTab();
   renderInterviewTab();
   renderOfferTab();
   renderOnboardingTab();
@@ -97,9 +116,14 @@ function openPositionModal(position) {
   state.editingPositionId = position ? position.id : null;
   $('#position-modal-title').textContent = position ? '포지션 조건 수정' : '새 포지션';
   $('#pm-title').value = position ? position.title : '';
-  $('#pm-required').value = position ? position.requiredSkills.join(', ') : '';
-  $('#pm-preferred').value = position ? position.preferredSkills.join(', ') : '';
-  $('#pm-years').value = position && position.minYears !== null ? position.minYears : '';
+  state.pmRequiredSkills = position ? [...position.requiredSkills] : [];
+  state.pmPreferredSkills = position ? [...position.preferredSkills] : [];
+  state.pmMinYears = position ? position.minYears : null;
+  renderChipPresets('#pm-required-presets', COMMON_SKILLS, state.pmRequiredSkills, (skill) => toggleChip('pmRequiredSkills', skill));
+  renderChipPresets('#pm-preferred-presets', COMMON_SKILLS, state.pmPreferredSkills, (skill) => toggleChip('pmPreferredSkills', skill));
+  renderChipList('#pm-required-chips', state.pmRequiredSkills, (skill) => toggleChip('pmRequiredSkills', skill));
+  renderChipList('#pm-preferred-chips', state.pmPreferredSkills, (skill) => toggleChip('pmPreferredSkills', skill));
+  renderYearsPresets();
   $('#position-modal').classList.remove('hidden');
 }
 
@@ -107,12 +131,70 @@ function closePositionModal() {
   $('#position-modal').classList.add('hidden');
 }
 
+/** 공통 스킬 버튼 행: 클릭하면 바로 해당 배열에 토글되고(이미 있으면 제거), 선택 상태를 시각적으로 표시. */
+function renderChipPresets(containerSel, presetList, selectedArr, onToggle) {
+  const el = $(containerSel);
+  el.innerHTML = presetList
+    .map((skill) => `<button type="button" class="chip-preset-btn ${selectedArr.includes(skill) ? 'selected' : ''}" data-skill="${escapeHtml(skill)}">${escapeHtml(skill)}</button>`)
+    .join('');
+  el.querySelectorAll('.chip-preset-btn').forEach((btn) => {
+    btn.addEventListener('click', () => onToggle(btn.dataset.skill));
+  });
+}
+
+/** 선택된 스킬을 칩(X 버튼 포함)으로 표시한다. */
+function renderChipList(containerSel, selectedArr, onRemove) {
+  const el = $(containerSel);
+  if (selectedArr.length === 0) {
+    el.innerHTML = '<span class="hint">아직 선택된 것이 없습니다.</span>';
+    return;
+  }
+  el.innerHTML = selectedArr
+    .map((skill) => `<span class="chip">${escapeHtml(skill)}<button type="button" class="chip-remove" data-skill="${escapeHtml(skill)}">✕</button></span>`)
+    .join('');
+  el.querySelectorAll('.chip-remove').forEach((btn) => {
+    btn.addEventListener('click', () => onRemove(btn.dataset.skill));
+  });
+}
+
+function toggleChip(stateKey, skill) {
+  const arr = state[stateKey];
+  const idx = arr.indexOf(skill);
+  if (idx === -1) arr.push(skill);
+  else arr.splice(idx, 1);
+  const presetsSel = stateKey === 'pmRequiredSkills' ? '#pm-required-presets' : '#pm-preferred-presets';
+  const chipsSel = stateKey === 'pmRequiredSkills' ? '#pm-required-chips' : '#pm-preferred-chips';
+  renderChipPresets(presetsSel, COMMON_SKILLS, arr, (s) => toggleChip(stateKey, s));
+  renderChipList(chipsSel, arr, (s) => toggleChip(stateKey, s));
+}
+
+function renderYearsPresets() {
+  const el = $('#pm-years-presets');
+  el.innerHTML = MIN_YEARS_PRESETS.map(
+    (opt) => `<button type="button" class="chip-preset-btn ${state.pmMinYears === opt.value ? 'selected' : ''}" data-value="${opt.value === null ? '' : opt.value}">${opt.label}</button>`,
+  ).join('');
+  el.querySelectorAll('.chip-preset-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      state.pmMinYears = btn.dataset.value === '' ? null : Number(btn.dataset.value);
+      renderYearsPresets();
+    });
+  });
+}
+
+function addCustomSkill(stateKey, inputSel) {
+  const input = $(inputSel);
+  const val = input.value.trim();
+  if (!val) return;
+  if (!state[stateKey].includes(val)) toggleChip(stateKey, val);
+  input.value = '';
+}
+
 async function savePositionFromModal() {
   const fields = {
     title: $('#pm-title').value.trim(),
-    requiredSkills: parseKeywords($('#pm-required').value),
-    preferredSkills: parseKeywords($('#pm-preferred').value),
-    minYears: $('#pm-years').value === '' ? null : Number($('#pm-years').value),
+    requiredSkills: [...state.pmRequiredSkills],
+    preferredSkills: [...state.pmPreferredSkills],
+    minYears: state.pmMinYears,
   };
   if (state.editingPositionId) {
     state.currentPosition = await window.horong.editPositionFields(state.editingPositionId, fields);
@@ -139,9 +221,17 @@ async function deleteCurrentPosition() {
 // 1. 소싱 탭
 // ============================================================
 
-function renderSourcingTab() {
+function urlCheckBadgeHtml(channelName) {
+  const result = state.urlCheckResults[channelName];
+  if (!result) return '';
+  if (result.pending) return '<span class="url-check-badge pending">확인 중…</span>';
+  if (result.reachable) return '<span class="url-check-badge ok">✓ 접속됨</span>';
+  return `<span class="url-check-badge fail">✕ 확인 안 됨${result.error ? ` (${escapeHtml(result.error)})` : ''}</span>`;
+}
+
+function renderJobPostTab() {
   const p = state.currentPosition;
-  const panel = $('#tab-sourcing');
+  const panel = $('#tab-jobpost');
   const channelsHtml = p.sourcing.channels
     .map(
       (ch, idx) => `
@@ -150,34 +240,78 @@ function renderSourcingTab() {
           <input type="checkbox" data-idx="${idx}" class="channel-posted" ${ch.posted ? 'checked' : ''} />
           ${escapeHtml(ch.name)}
         </label>
-        <input type="text" data-idx="${idx}" class="channel-url" placeholder="공고 URL (선택)" value="${escapeHtml(ch.url)}" />
+        <input type="text" data-idx="${idx}" class="channel-url" placeholder="공고 URL을 붙여넣으면 자동으로 살아있는지 확인합니다" value="${escapeHtml(ch.url)}" />
+        <button type="button" class="secondary btn-check-url" data-idx="${idx}" data-name="${escapeHtml(ch.name)}">자동확인</button>
+        ${urlCheckBadgeHtml(ch.name)}
       </div>`,
     )
     .join('');
 
   panel.innerHTML = `
     <div class="panel-card">
-      <h3>채용공고 게재 체크리스트</h3>
-      <p class="hint">공고를 올린 채널을 체크하고 URL을 남겨두면 나중에 찾기 쉽습니다. (자동 연동은 하지 않습니다 - 링크만 기록)</p>
+      <h3>1. 채용공고 등록 현황</h3>
+      <p class="hint">각 채널에 공고를 올리고 URL을 붙여넣으면, 직접 체크하지 않아도 "자동확인" 버튼이 링크가 살아있는지 확인해줍니다 (공고 내용 자체를 읽어오는 건 아니고, 링크가 살아있는지만 확인합니다).</p>
       <div class="channel-list">${channelsHtml}</div>
+      <button id="btn-save-jobpost" class="primary">저장</button>
+      <span id="jobpost-save-status" class="status"></span>
     </div>
+  `;
+
+  panel.querySelector('#btn-save-jobpost').addEventListener('click', async () => {
+    const channels = p.sourcing.channels.map((ch, idx) => ({
+      name: ch.name,
+      posted: panel.querySelector(`.channel-posted[data-idx="${idx}"]`).checked,
+      url: panel.querySelector(`.channel-url[data-idx="${idx}"]`).value.trim(),
+    }));
+    state.currentPosition = await window.horong.updateSourcing(p.id, channels, p.sourcing.notes);
+    panel.querySelector('#jobpost-save-status').textContent = '저장됨';
+    await refreshPositionList();
+  });
+
+  panel.querySelectorAll('.btn-check-url').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const idx = btn.dataset.idx;
+      const name = btn.dataset.name;
+      const url = panel.querySelector(`.channel-url[data-idx="${idx}"]`).value.trim();
+      if (!url) {
+        state.urlCheckResults[name] = { reachable: false, error: 'URL을 먼저 입력해주세요' };
+        renderJobPostTab();
+        return;
+      }
+      state.urlCheckResults[name] = { pending: true };
+      renderJobPostTab();
+      const result = await window.horong.checkUrlReachable(url);
+      state.urlCheckResults[name] = result;
+      if (result.reachable) {
+        const channels = p.sourcing.channels.map((ch, i) => ({
+          name: ch.name,
+          posted: i === Number(idx) ? true : panel.querySelector(`.channel-posted[data-idx="${i}"]`).checked,
+          url: panel.querySelector(`.channel-url[data-idx="${i}"]`).value.trim(),
+        }));
+        state.currentPosition = await window.horong.updateSourcing(p.id, channels, p.sourcing.notes);
+        await refreshPositionList();
+      }
+      renderJobPostTab();
+    });
+  });
+}
+
+function renderSourcingTab() {
+  const p = state.currentPosition;
+  const panel = $('#tab-sourcing');
+  panel.innerHTML = `
     <div class="panel-card">
-      <h3>소싱 메모</h3>
-      <p class="hint">지인 추천, 서치펌, 채용 커뮤니티 등 후보자 확보 경로를 자유롭게 기록하세요.</p>
-      <textarea id="sourcing-notes" rows="6" placeholder="예: OO커뮤니티에 공고 공유함, 지인 추천 2명 컨택 예정...">${escapeHtml(p.sourcing.notes)}</textarea>
+      <h3>2. 채용풀 직접 소싱</h3>
+      <p class="hint">공고 게재와 별개로, 지인 추천·서치펌·커뮤니티 등 직접 후보자를 찾는 활동을 기록하세요.</p>
+      <textarea id="sourcing-notes" rows="8" placeholder="예: OO커뮤니티에 공유함, 지인 추천 2명 컨택 예정, LinkedIn에서 직접 메시지 발송...">${escapeHtml(p.sourcing.notes)}</textarea>
       <button id="btn-save-sourcing" class="primary">저장</button>
       <span id="sourcing-save-status" class="status"></span>
     </div>
   `;
 
   panel.querySelector('#btn-save-sourcing').addEventListener('click', async () => {
-    const channels = p.sourcing.channels.map((ch, idx) => ({
-      name: ch.name,
-      posted: panel.querySelector(`.channel-posted[data-idx="${idx}"]`).checked,
-      url: panel.querySelector(`.channel-url[data-idx="${idx}"]`).value.trim(),
-    }));
     const notes = panel.querySelector('#sourcing-notes').value;
-    state.currentPosition = await window.horong.updateSourcing(p.id, channels, notes);
+    state.currentPosition = await window.horong.updateSourcing(p.id, p.sourcing.channels, notes);
     panel.querySelector('#sourcing-save-status').textContent = '저장됨';
     await refreshPositionList();
   });
@@ -407,7 +541,73 @@ async function openCandidateDetail(candidateId) {
 }
 
 // ============================================================
-// 3. 면접 탭
+// 4. 이력서 분석 (AI) 탭
+// ============================================================
+
+function renderAnalysisTab() {
+  const p = state.currentPosition;
+  const panel = $('#tab-analysis');
+
+  if (p.candidates.length === 0) {
+    panel.innerHTML = `<div class="panel-card"><p class="empty-state">서류스크리닝 탭에서 이력서를 먼저 업로드해주세요.</p></div>`;
+    return;
+  }
+
+  const llmReady = state.settings && state.settings.llm && state.settings.llm.apiKey;
+  const noticeHtml = llmReady
+    ? ''
+    : `<div class="panel-card"><p class="hint">AI 분석을 쓰려면 먼저 <button class="link-btn" id="btn-goto-settings-from-analysis">LLM 설정</button>에서 본인의 API 키를 등록해주세요. 이력서 원문은 이름/연락처를 마스킹 처리한 뒤에만 전송됩니다.</p></div>`;
+
+  const cardsHtml = p.candidates
+    .map((c) => {
+      const a = c.aiAnalysis;
+      if (!a) {
+        return `
+          <div class="panel-card">
+            <h4>${escapeHtml(c.candidateName || c.fileName)} <span class="hint">규칙기반 점수 ${c.score}점</span></h4>
+            <button class="secondary btn-analyze" data-candidate="${c.id}" ${llmReady ? '' : 'disabled'}>AI 분석 실행</button>
+          </div>`;
+      }
+      return `
+        <div class="panel-card analysis-card">
+          <h4>${escapeHtml(c.candidateName || c.fileName)} <span class="fit-score-badge">${a.fitScore ?? '-'}점</span></h4>
+          <p>${escapeHtml(a.summary || '')}</p>
+          <p class="hint">강점</p>
+          <ul class="analysis-list">${(a.strengths || []).map((s) => `<li>${escapeHtml(s)}</li>`).join('') || '<li>-</li>'}</ul>
+          <p class="hint">우려사항</p>
+          <ul class="analysis-list">${(a.concerns || []).map((s) => `<li>${escapeHtml(s)}</li>`).join('') || '<li>-</li>'}</ul>
+          <p class="hint">면접 추천 질문</p>
+          <ul class="analysis-list">${(a.recommendedQuestions || []).map((s) => `<li>${escapeHtml(s)}</li>`).join('') || '<li>-</li>'}</ul>
+          <span class="masked-note">개인정보 마스킹 후 전송됨 (${(a.maskedFields || []).join(', ') || '마스킹 대상 없음'})</span>
+          <div><button class="secondary btn-analyze" data-candidate="${c.id}" ${llmReady ? '' : 'disabled'}>다시 분석</button></div>
+        </div>`;
+    })
+    .join('');
+
+  panel.innerHTML = `${noticeHtml}<div class="panel-card"><h3>지원자 AI 분석 (${p.candidates.length}명)</h3><p class="hint">규칙기반 점수(서류스크리닝 탭)는 무료이고 즉시 계산되는 1차 필터입니다. 여기서는 그 중 관심 가는 후보자만 골라 AI로 깊이 분석합니다 (호출당 비용이 발생합니다).</p></div>${cardsHtml}`;
+
+  const gotoBtn = panel.querySelector('#btn-goto-settings-from-analysis');
+  if (gotoBtn) gotoBtn.addEventListener('click', openSettingsModal);
+
+  panel.querySelectorAll('.btn-analyze').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const candidateId = btn.dataset.candidate;
+      btn.disabled = true;
+      btn.textContent = '분석 중…';
+      try {
+        state.currentPosition = await window.horong.analyzeCandidate(p.id, candidateId);
+        renderAnalysisTab();
+      } catch (e) {
+        btn.disabled = false;
+        btn.textContent = '다시 시도';
+        alert(`AI 분석 실패: ${e.message}`);
+      }
+    });
+  });
+}
+
+// ============================================================
+// 5. 면접 탭
 // ============================================================
 
 function renderInterviewTab() {
@@ -688,6 +888,43 @@ function renderOnboardingTab() {
 // 초기화 / 전역 이벤트
 // ============================================================
 
+// ============================================================
+// 설정 (LLM 연결) 모달
+// ============================================================
+
+function openSettingsModal() {
+  const llm = (state.settings && state.settings.llm) || { provider: 'openai', apiKey: '', baseUrl: '', model: 'gpt-4o-mini' };
+  $('#settings-provider').value = llm.provider;
+  $('#settings-baseurl').value = llm.baseUrl || '';
+  $('#settings-apikey').value = llm.apiKey || '';
+  $('#settings-model').value = llm.model || '';
+  $('#settings-status').textContent = '';
+  $('#settings-modal').classList.remove('hidden');
+}
+
+function closeSettingsModal() {
+  $('#settings-modal').classList.add('hidden');
+}
+
+async function saveSettingsFromModal() {
+  const fields = {
+    provider: $('#settings-provider').value,
+    baseUrl: $('#settings-baseurl').value.trim(),
+    apiKey: $('#settings-apikey').value.trim(),
+    model: $('#settings-model').value.trim(),
+  };
+  state.settings = await window.horong.saveLLMSettings(fields);
+  $('#settings-status').textContent = '저장됨';
+  if (state.currentPosition) renderAnalysisTab();
+}
+
+async function testLLMConnectionFromModal() {
+  $('#settings-status').textContent = '연결 확인 중… (저장되지 않은 필드는 먼저 저장 후 테스트해주세요)';
+  await saveSettingsFromModal();
+  const result = await window.horong.testLLMConnection();
+  $('#settings-status').textContent = result.ok ? `연결 성공 (응답: ${result.reply})` : `연결 실패: ${result.error}`;
+}
+
 function bindGlobalEvents() {
   $('#btn-new-position').addEventListener('click', () => openPositionModal(null));
   $('#btn-edit-position').addEventListener('click', () => openPositionModal(state.currentPosition));
@@ -698,9 +935,26 @@ function bindGlobalEvents() {
     if (e.target.id === 'position-modal') closePositionModal();
   });
 
+  $('#pm-required-add').addEventListener('click', () => addCustomSkill('pmRequiredSkills', '#pm-required-input'));
+  $('#pm-preferred-add').addEventListener('click', () => addCustomSkill('pmPreferredSkills', '#pm-preferred-input'));
+  $('#pm-required-input').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); addCustomSkill('pmRequiredSkills', '#pm-required-input'); }
+  });
+  $('#pm-preferred-input').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); addCustomSkill('pmPreferredSkills', '#pm-preferred-input'); }
+  });
+
   $('#btn-close-detail-modal').addEventListener('click', () => $('#detail-modal').classList.add('hidden'));
   $('#detail-modal').addEventListener('click', (e) => {
     if (e.target.id === 'detail-modal') $('#detail-modal').classList.add('hidden');
+  });
+
+  $('#btn-open-settings').addEventListener('click', openSettingsModal);
+  $('#btn-close-settings-modal').addEventListener('click', closeSettingsModal);
+  $('#btn-save-settings').addEventListener('click', saveSettingsFromModal);
+  $('#btn-test-llm').addEventListener('click', testLLMConnectionFromModal);
+  $('#settings-modal').addEventListener('click', (e) => {
+    if (e.target.id === 'settings-modal') closeSettingsModal();
   });
 
   $('#tab-nav').addEventListener('click', (e) => {
@@ -711,6 +965,7 @@ function bindGlobalEvents() {
 
 async function init() {
   bindGlobalEvents();
+  state.settings = await window.horong.getSettings();
   await refreshPositionList();
   renderPositionView();
 }

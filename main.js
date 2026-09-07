@@ -5,19 +5,20 @@ const path = require('node:path');
 const fs = require('node:fs/promises');
 const { extractFromFile, SUPPORTED_EXTENSIONS } = require('./src/extractText');
 const { rankResumes } = require('./src/scoring');
+const { generateInterviewQuestions } = require('./src/interviewQuestions');
+const { generateOfferEmail, generateRejectionEmail } = require('./src/emailTemplates');
+const { generateOnboardingChecklist } = require('./src/onboardingChecklist');
+const store = require('./src/positionStore');
 
 let mainWindow = null;
 
-// 세션 저장 경로 (userData 안, 사용자 PC 로컬 디스크). 클라우드 동기화 폴더는 아니지만
-// 혹시 Dropbox/OneDrive 등 동기화 폴더 안에 userData가 있는 특수 환경은 사용자 책임.
-function getSessionsDir() {
-  return path.join(app.getPath('userData'), 'sessions');
+function getDbFilePath() {
+  return path.join(app.getPath('userData'), 'positions.json');
 }
 
 /**
- * 신뢰 확보 장치: 이 앱은 렌더러/메인 어디에서도 이력서 원문을 외부로 보내지 않는다.
+ * 신뢰 확보 장치: 이 앱은 렌더러/메인 어디에서도 이력서 원문이나 채용 데이터를 외부로 보내지 않는다.
  * 방어적으로, 세션 레벨에서 http/https 아웃바운드 요청 자체를 전부 차단한다.
- * (electron 자동 업데이트, 원격 폰트/이미지 로딩 같은 것도 전부 막힘 - 의도된 동작)
  */
 function blockAllNetworkRequests() {
   session.defaultSession.webRequest.onBeforeRequest((details, callback) => {
@@ -33,11 +34,11 @@ function blockAllNetworkRequests() {
 
 function createWindow() {
   mainWindow = new BrowserWindow({
-    width: 1280,
-    height: 860,
-    minWidth: 1000,
-    minHeight: 640,
-    title: '호롱 이력서 스크리너 (호롱랩스)',
+    width: 1360,
+    height: 900,
+    minWidth: 1080,
+    minHeight: 680,
+    title: '호롱 채용 워크스페이스 (호롱랩스)',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -51,7 +52,6 @@ function createWindow() {
 app.whenReady().then(() => {
   blockAllNetworkRequests();
   createWindow();
-
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
@@ -61,7 +61,7 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
 });
 
-// --- IPC handlers ---
+// --- 파일 선택 (기존 그대로) ---
 
 ipcMain.handle('select-resume-files', async () => {
   const result = await dialog.showOpenDialog(mainWindow, {
@@ -79,7 +79,6 @@ ipcMain.handle('select-resume-files', async () => {
 const MAX_FOLDER_SCAN_FILES = 500;
 const MAX_FOLDER_SCAN_DEPTH = 4;
 
-/** 폴더(하위폴더 포함)를 재귀적으로 둔어 지원 확장자 파일만 모은다. 숨김파일/폴더(.으로 시작)는 제외한다. */
 async function scanResumeFolder(dirPath, depth = 0, results = []) {
   if (depth > MAX_FOLDER_SCAN_DEPTH || results.length >= MAX_FOLDER_SCAN_FILES) return results;
   let entries;
@@ -115,35 +114,17 @@ ipcMain.handle('select-resume-folder', async () => {
   return { filePaths, folderPath, truncated: filePaths.length >= MAX_FOLDER_SCAN_FILES };
 });
 
-ipcMain.handle('extract-and-score', async (_event, { jd, filePaths }) => {
-  const extracted = [];
-  const errors = [];
-  for (const fp of filePaths) {
-    try {
-      const { fileName, text } = await extractFromFile(fp);
-      extracted.push({ fileName, text, filePath: fp });
-    } catch (err) {
-      errors.push({ filePath: fp, message: err.message });
-    }
-  }
-  const ranked = rankResumes(jd, extracted);
-  // filePath는 렌더러로 넘겨서 "상세보기"에서 원문 재조회에 쓴다 (텍스트 자체도 이미 로컬 메모리에만 존재).
-  const rankedWithPath = ranked.map((r) => {
-    const src = extracted.find((e) => e.fileName === r.fileName);
-    return { ...r, filePath: src ? src.filePath : null };
-  });
-  return { ranked: rankedWithPath, errors, supportedExtensions: SUPPORTED_EXTENSIONS };
-});
-
 ipcMain.handle('get-resume-text', async (_event, filePath) => {
   const { text } = await extractFromFile(filePath);
   return text;
 });
 
+// --- 내보내기 ---
+
 ipcMain.handle('export-csv', async (_event, { rows, defaultName }) => {
   const result = await dialog.showSaveDialog(mainWindow, {
     title: '결과 내보내기',
-    defaultPath: defaultName || '호롱랩스_이력서스크리닝_결과.csv',
+    defaultPath: defaultName || '호롱랩스_결과.csv',
     filters: [{ name: 'CSV', extensions: ['csv'] }],
   });
   if (result.canceled || !result.filePath) return { saved: false };
@@ -154,46 +135,130 @@ ipcMain.handle('export-csv', async (_event, { rows, defaultName }) => {
 ipcMain.handle('export-xlsx', async (_event, { records, defaultName }) => {
   const result = await dialog.showSaveDialog(mainWindow, {
     title: '결과 엑셀로 내보내기',
-    defaultPath: defaultName || '호롱랩스_이력서스크리닝_결과.xlsx',
+    defaultPath: defaultName || '호롱랩스_결과.xlsx',
     filters: [{ name: 'Excel', extensions: ['xlsx'] }],
   });
   if (result.canceled || !result.filePath) return { saved: false };
-
-  // xlsx 라이브러리도 이 프로세스(main) 안에서만 돌고, 생성된 파일은 사용자가 고른 경로에만 저장된다 (네트워크 미사용).
   const XLSX = require('xlsx');
   const worksheet = XLSX.utils.json_to_sheet(records);
-  worksheet['!cols'] = [
-    { wch: 6 }, { wch: 14 }, { wch: 26 }, { wch: 8 },
-    { wch: 30 }, { wch: 24 }, { wch: 20 }, { wch: 10 },
-    { wch: 10 }, { wch: 22 }, { wch: 16 },
-  ];
   const workbook = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(workbook, worksheet, '스크리닝결과');
+  XLSX.utils.book_append_sheet(workbook, worksheet, '결과');
   XLSX.writeFile(workbook, result.filePath);
   return { saved: true, filePath: result.filePath };
 });
 
-// --- 세션 저장/불러오기 (JD + 결과, 전부 userData 로컬 디스크에만 저장) ---
+// --- 포지션 CRUD ---
 
-ipcMain.handle('save-session', async (_event, { name, data }) => {
-  const dir = getSessionsDir();
-  await fs.mkdir(dir, { recursive: true });
-  const safeName = (name || `session-${Date.now()}`).replace(/[\\/:*?"<>|]/g, '_');
-  const filePath = path.join(dir, `${safeName}.json`);
-  await fs.writeFile(filePath, JSON.stringify(data, null, 2), 'utf-8');
-  return { savedPath: filePath };
+ipcMain.handle('list-positions', async () => {
+  return store.listPositions(getDbFilePath());
 });
 
-ipcMain.handle('list-sessions', async () => {
-  const dir = getSessionsDir();
-  await fs.mkdir(dir, { recursive: true });
-  const files = await fs.readdir(dir);
-  return files.filter((f) => f.endsWith('.json'));
+ipcMain.handle('get-position', async (_event, id) => {
+  return store.getPosition(getDbFilePath(), id);
 });
 
-ipcMain.handle('load-session', async (_event, fileName) => {
-  const dir = getSessionsDir();
-  const filePath = path.join(dir, fileName);
-  const raw = await fs.readFile(filePath, 'utf-8');
-  return JSON.parse(raw);
+ipcMain.handle('create-position', async (_event, fields) => {
+  return store.createPosition(getDbFilePath(), fields);
+});
+
+ipcMain.handle('edit-position-fields', async (_event, { id, fields }) => {
+  return store.updatePosition(getDbFilePath(), id, (p) => store.editPositionFields(p, fields));
+});
+
+ipcMain.handle('delete-position', async (_event, id) => {
+  await store.deletePosition(getDbFilePath(), id);
+  return { deleted: true };
+});
+
+// --- 2. 서류스크리닝: 이력서 추출+채점 후 포지션에 저장 ---
+
+ipcMain.handle('screen-candidates', async (_event, { positionId, filePaths }) => {
+  const extracted = [];
+  const errors = [];
+  for (const fp of filePaths) {
+    try {
+      const { fileName, text } = await extractFromFile(fp);
+      extracted.push({ fileName, text, filePath: fp });
+    } catch (err) {
+      errors.push({ filePath: fp, message: err.message });
+    }
+  }
+  const position = await store.getPosition(getDbFilePath(), positionId);
+  if (!position) throw new Error('포지션을 찾을 수 없습니다');
+  const jd = { title: position.title, requiredSkills: position.requiredSkills, preferredSkills: position.preferredSkills, minYears: position.minYears };
+  const ranked = rankResumes(jd, extracted);
+  const rankedWithPath = ranked.map((r) => {
+    const src = extracted.find((e) => e.fileName === r.fileName);
+    return { ...r, filePath: src ? src.filePath : null };
+  });
+  const updated = await store.updatePosition(getDbFilePath(), positionId, (p) => store.addCandidates(p, rankedWithPath));
+  return { position: updated, errors };
+});
+
+ipcMain.handle('set-candidate-stage', async (_event, { positionId, candidateId, stage }) => {
+  return store.updatePosition(getDbFilePath(), positionId, (p) => store.setCandidateStage(p, candidateId, stage));
+});
+
+ipcMain.handle('set-candidate-note', async (_event, { positionId, candidateId, notes }) => {
+  return store.updatePosition(getDbFilePath(), positionId, (p) => store.setCandidateNote(p, candidateId, notes));
+});
+
+// --- 1. 소싱 ---
+
+ipcMain.handle('update-sourcing', async (_event, { positionId, channels, notes }) => {
+  return store.updatePosition(getDbFilePath(), positionId, (p) => store.updateSourcing(p, { channels, notes }));
+});
+
+// --- 3. 면접 ---
+
+ipcMain.handle('generate-interview-questions', async (_event, positionId) => {
+  const position = await store.getPosition(getDbFilePath(), positionId);
+  if (!position) throw new Error('포지션을 찾을 수 없습니다');
+  const jd = { title: position.title, requiredSkills: position.requiredSkills, preferredSkills: position.preferredSkills, minYears: position.minYears };
+  const questions = generateInterviewQuestions(jd);
+  const updated = await store.updatePosition(getDbFilePath(), positionId, (p) => store.setInterviewQuestions(p, questions));
+  return updated.interview.questions;
+});
+
+ipcMain.handle('set-interview-result', async (_event, { positionId, candidateId, result }) => {
+  return store.updatePosition(getDbFilePath(), positionId, (p) => store.setInterviewResult(p, candidateId, result));
+});
+
+// --- 4. 합격통보 ---
+
+ipcMain.handle('generate-offer-email', async (_event, { positionId, candidateId, extra }) => {
+  const position = await store.getPosition(getDbFilePath(), positionId);
+  const candidate = position?.candidates.find((c) => c.id === candidateId);
+  return generateOfferEmail({
+    candidateName: candidate?.candidateName,
+    positionTitle: position?.title,
+    companyName: extra?.companyName,
+    startDate: extra?.startDate,
+    extraNote: extra?.extraNote,
+  });
+});
+
+ipcMain.handle('generate-rejection-email', async (_event, { positionId, candidateId, extra }) => {
+  const position = await store.getPosition(getDbFilePath(), positionId);
+  const candidate = position?.candidates.find((c) => c.id === candidateId);
+  return generateRejectionEmail({
+    candidateName: candidate?.candidateName,
+    positionTitle: position?.title,
+    companyName: extra?.companyName,
+    extraNote: extra?.extraNote,
+  });
+});
+
+// --- 5. 온보딩 ---
+
+ipcMain.handle('generate-onboarding-checklist', async (_event, positionId) => {
+  const position = await store.getPosition(getDbFilePath(), positionId);
+  if (!position) throw new Error('포지션을 찾을 수 없습니다');
+  const checklist = generateOnboardingChecklist({ title: position.title });
+  const updated = await store.updatePosition(getDbFilePath(), positionId, (p) => store.setOnboardingChecklist(p, checklist));
+  return updated.onboarding;
+});
+
+ipcMain.handle('toggle-onboarding-item', async (_event, { positionId, itemKey }) => {
+  return store.updatePosition(getDbFilePath(), positionId, (p) => store.toggleOnboardingItem(p, itemKey));
 });

@@ -3,13 +3,39 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('horong', {
+  // 파일 선택
   selectResumeFiles: () => ipcRenderer.invoke('select-resume-files'),
   selectResumeFolder: () => ipcRenderer.invoke('select-resume-folder'),
-  extractAndScore: (jd, filePaths) => ipcRenderer.invoke('extract-and-score', { jd, filePaths }),
   getResumeText: (filePath) => ipcRenderer.invoke('get-resume-text', filePath),
+
+  // 내보내기
   exportCsv: (rows, defaultName) => ipcRenderer.invoke('export-csv', { rows, defaultName }),
   exportXlsx: (records, defaultName) => ipcRenderer.invoke('export-xlsx', { records, defaultName }),
-  saveSession: (name, data) => ipcRenderer.invoke('save-session', { name, data }),
-  listSessions: () => ipcRenderer.invoke('list-sessions'),
-  loadSession: (fileName) => ipcRenderer.invoke('load-session', fileName),
+
+  // 포지션 CRUD
+  listPositions: () => ipcRenderer.invoke('list-positions'),
+  getPosition: (id) => ipcRenderer.invoke('get-position', id),
+  createPosition: (fields) => ipcRenderer.invoke('create-position', fields),
+  editPositionFields: (id, fields) => ipcRenderer.invoke('edit-position-fields', { id, fields }),
+  deletePosition: (id) => ipcRenderer.invoke('delete-position', id),
+
+  // 1. 소싱
+  updateSourcing: (positionId, channels, notes) => ipcRenderer.invoke('update-sourcing', { positionId, channels, notes }),
+
+  // 2. 서류스크리닝
+  screenCandidates: (positionId, filePaths) => ipcRenderer.invoke('screen-candidates', { positionId, filePaths }),
+  setCandidateStage: (positionId, candidateId, stage) => ipcRenderer.invoke('set-candidate-stage', { positionId, candidateId, stage }),
+  setCandidateNote: (positionId, candidateId, notes) => ipcRenderer.invoke('set-candidate-note', { positionId, candidateId, notes }),
+
+  // 3. 면접
+  generateInterviewQuestions: (positionId) => ipcRenderer.invoke('generate-interview-questions', positionId),
+  setInterviewResult: (positionId, candidateId, result) => ipcRenderer.invoke('set-interview-result', { positionId, candidateId, result }),
+
+  // 4. 합격통보
+  generateOfferEmail: (positionId, candidateId, extra) => ipcRenderer.invoke('generate-offer-email', { positionId, candidateId, extra }),
+  generateRejectionEmail: (positionId, candidateId, extra) => ipcRenderer.invoke('generate-rejection-email', { positionId, candidateId, extra }),
+
+  // 5. 온보딩
+  generateOnboardingChecklist: (positionId) => ipcRenderer.invoke('generate-onboarding-checklist', positionId),
+  toggleOnboardingItem: (positionId, itemKey) => ipcRenderer.invoke('toggle-onboarding-item', { positionId, itemKey }),
 });

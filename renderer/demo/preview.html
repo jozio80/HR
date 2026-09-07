@@ -2,101 +2,96 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8" />
-<title>호롱 이력서 스크리너 (미리보기)</title>
+<title>호롱 채용 워크스페이스 (미리보기)</title>
 <link rel="stylesheet" href="../style.css" />
 </head>
 <body>
-  <header class="topbar">
-    <div class="brand">
-      <span class="lamp">🏮</span>
-      <div>
-        <h1>호롱 이력서 스크리너</h1>
-        <p class="tagline">호롱랩스 · 채용 실무자를 위한 로컬 전용 1차 스크리닝 도구</p>
-      </div>
-    </div>
-    <div class="privacy-badge" title="이 앱은 어떤 이력서 데이터도 네트워크로 전송하지 않습니다.">
-      <span class="dot"></span> 100% 로컬 처리 · 네트워크 전송 없음
-    </div>
-  </header>
-
-  <main class="layout">
-    <section class="panel jd-panel">
-      <h2>1. 채용 조건 입력</h2>
-      <label>직무명
-        <input id="jd-title" type="text" placeholder="예: 백엔드 개발자 (3년 이상)" />
-      </label>
-      <label>필수 스킬 / 키워드 <span class="hint">(쉼표로 구분)</span>
-        <textarea id="jd-required" rows="2" placeholder="예: Java, Spring Boot, MySQL"></textarea>
-      </label>
-      <label>우대 스킬 / 키워드 <span class="hint">(쉼표로 구분)</span>
-        <textarea id="jd-preferred" rows="2" placeholder="예: AWS, Kafka, 대용량 트래픽 경험"></textarea>
-      </label>
-      <label>최소 경력 연차
-        <input id="jd-years" type="number" min="0" max="30" placeholder="예: 3" />
-      </label>
-      <div class="jd-actions">
-        <button id="btn-save-session" class="secondary">현재 조건 저장</button>
-        <select id="session-select"><option value="">저장된 조건 불러오기…</option></select>
-      </div>
-    </section>
-
-    <section class="panel upload-panel">
-      <h2>2. 이력서 업로드</h2>
-      <p class="hint">지원 형식: PDF · DOCX · TXT. 파일은 이 PC에서만 열리고 분석됩니다.</p>
-      <div class="upload-actions">
-        <button id="btn-select-files" class="primary">파일 선택…</button>
-        <button id="btn-select-folder" class="primary">폴더 선택 (일괄)…</button>
-      </div>
-      <div class="file-list-header">
-        <span id="file-count-label">선택된 파일 0개</span>
-        <button id="btn-clear-files" class="link-btn">목록 비우기</button>
-      </div>
-      <ul id="file-list" class="file-list"></ul>
-      <button id="btn-run" class="primary run-btn" disabled>스크리닝 시작</button>
-      <p id="run-status" class="status"></p>
-    </section>
-
-    <section class="panel results-panel">
-      <div class="results-header">
-        <h2>3. 결과 (점수 높은 순)</h2>
-        <div class="export-group">
-          <button id="btn-export-xlsx" class="secondary" disabled>엑셀로 내보내기</button>
-          <button id="btn-export" class="secondary" disabled>CSV로 내보내기</button>
+  <div class="workspace">
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <span class="lamp">🏮</span>
+        <div>
+          <h1>호롱랩스</h1>
+          <p class="tagline">채용 워크스페이스</p>
         </div>
       </div>
-      <table id="results-table">
-        <thead>
-          <tr>
-            <th>순위</th>
-            <th>지원자</th>
-            <th>점수</th>
-            <th>필수 매칭</th>
-            <th>우대 매칭</th>
-            <th>추정 경력</th>
-            <th>학력</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody id="results-body"></tbody>
-      </table>
-      <p id="empty-state" class="empty-state">아직 결과가 없습니다. 채용 조건을 입력하고 이력서를 업로드한 뒤 스크리닝을 시작하세요.</p>
-    </section>
-  </main>
+      <div class="privacy-badge-mini"><span class="dot"></span> 100% 로컬 처리 · 네트워크 전송 없음</div>
+      <button id="btn-new-position" class="primary full-width">+ 새 포지션</button>
+      <div id="position-list" class="position-list"></div>
+    </aside>
+
+    <main class="main-area">
+      <div id="empty-workspace" class="empty-workspace">
+        <p>왼쪽에서 포지션을 선택하거나<br />"+ 새 포지션"으로 채용을 시작하세요.</p>
+      </div>
+
+      <div id="position-view" class="position-view hidden">
+        <header class="position-header">
+          <div>
+            <h2 id="position-title"></h2>
+            <p id="position-summary" class="hint"></p>
+          </div>
+          <div class="position-header-actions">
+            <button id="btn-edit-position" class="secondary">조건 수정</button>
+            <button id="btn-delete-position" class="link-btn danger">포지션 삭제</button>
+          </div>
+        </header>
+
+        <nav class="tabs" id="tab-nav">
+          <button class="tab-btn active" data-tab="sourcing">1. 소싱</button>
+          <button class="tab-btn" data-tab="screening">2. 서류스크리닝</button>
+          <button class="tab-btn" data-tab="interview">3. 면접</button>
+          <button class="tab-btn" data-tab="offer">4. 합격통보</button>
+          <button class="tab-btn" data-tab="onboarding">5. 온보딩</button>
+        </nav>
+
+        <section id="tab-sourcing" class="tab-panel"></section>
+        <section id="tab-screening" class="tab-panel hidden"></section>
+        <section id="tab-interview" class="tab-panel hidden"></section>
+        <section id="tab-offer" class="tab-panel hidden"></section>
+        <section id="tab-onboarding" class="tab-panel hidden"></section>
+      </div>
+    </main>
+  </div>
+
+  <div id="position-modal" class="modal hidden">
+    <div class="modal-content">
+      <button id="btn-close-position-modal" class="close-btn">✕</button>
+      <h3 id="position-modal-title">새 포지션</h3>
+      <label>직무명
+        <input id="pm-title" type="text" placeholder="예: 백엔드 개발자 (3년 이상)" />
+      </label>
+      <label>필수 스킬 / 키워드 <span class="hint">(쉼표로 구분)</span>
+        <textarea id="pm-required" rows="2" placeholder="예: Java, Spring Boot, MySQL"></textarea>
+      </label>
+      <label>우대 스킬 / 키워드 <span class="hint">(쉼표로 구분)</span>
+        <textarea id="pm-preferred" rows="2" placeholder="예: AWS, Kafka"></textarea>
+      </label>
+      <label>최소 경력 연차
+        <input id="pm-years" type="number" min="0" max="30" placeholder="예: 3" />
+      </label>
+      <button id="btn-save-position" class="primary full-width">저장</button>
+    </div>
+  </div>
 
   <div id="detail-modal" class="modal hidden">
     <div class="modal-content">
-      <button id="btn-close-modal" class="close-btn">✕</button>
+      <button id="btn-close-detail-modal" class="close-btn">✕</button>
       <h3 id="detail-filename"></h3>
       <div id="detail-body"></div>
     </div>
   </div>
 
   <footer class="footer">
-    <span>호롱랩스 v0.1.0 (프로토타입 · 브라우저 미리보기)</span>
-    <span>이 도구의 채점은 키워드 규칙 기반이며, 최종 채용 판단은 반드시 사람이 검토해야 합니다.</span>
+    <span>호롱랩스 v0.3.0 (프로토타입 · 브라우저 미리보기)</span>
+    <span>채점/생성 로직은 전부 규칙 기반이며, 최종 채용 판단은 반드시 사람이 검토해야 합니다.</span>
   </footer>
 
   <script src="scoring.browser.js"></script>
+  <script src="interviewQuestions.browser.js"></script>
+  <script src="emailTemplates.browser.js"></script>
+  <script src="onboardingChecklist.browser.js"></script>
+  <script src="positionStore.browser.js"></script>
   <script src="mock.js"></script>
   <script src="../app.js"></script>
 </body>

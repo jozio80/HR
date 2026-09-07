@@ -151,6 +151,28 @@ ipcMain.handle('export-csv', async (_event, { rows, defaultName }) => {
   return { saved: true, filePath: result.filePath };
 });
 
+ipcMain.handle('export-xlsx', async (_event, { records, defaultName }) => {
+  const result = await dialog.showSaveDialog(mainWindow, {
+    title: '결과 엑셀로 내보내기',
+    defaultPath: defaultName || '호롱랩스_이력서스크리닝_결과.xlsx',
+    filters: [{ name: 'Excel', extensions: ['xlsx'] }],
+  });
+  if (result.canceled || !result.filePath) return { saved: false };
+
+  // xlsx 라이브러리도 이 프로세스(main) 안에서만 돌고, 생성된 파일은 사용자가 고른 경로에만 저장된다 (네트워크 미사용).
+  const XLSX = require('xlsx');
+  const worksheet = XLSX.utils.json_to_sheet(records);
+  worksheet['!cols'] = [
+    { wch: 6 }, { wch: 14 }, { wch: 26 }, { wch: 8 },
+    { wch: 30 }, { wch: 24 }, { wch: 20 }, { wch: 10 },
+    { wch: 10 }, { wch: 22 }, { wch: 16 },
+  ];
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, '스크리닝결과');
+  XLSX.writeFile(workbook, result.filePath);
+  return { saved: true, filePath: result.filePath };
+});
+
 // --- 세션 저장/불러오기 (JD + 결과, 전부 userData 로컬 디스크에만 저장) ---
 
 ipcMain.handle('save-session', async (_event, { name, data }) => {

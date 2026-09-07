@@ -8,15 +8,17 @@
   "private": true,
   "scripts": {
     "start": "electron .",
-    "test": "node --test test/",
+    "test": "node --test test/*.test.js",
     "pack": "electron-builder --dir",
     "dist": "electron-builder"
   },
   "dependencies": {
     "mammoth": "^1.12.2",
-    "pdf-parse": "^1.1.1"
+    "pdf-parse": "^1.1.1",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
+    "docx": "^9.7.1",
     "electron": "^44.2.0",
     "electron-builder": "^26.15.3"
   },
@@ -39,10 +41,21 @@
     ],
     "mac": {
       "category": "public.app-category.business",
-      "target": ["dir"]
+      "target": [
+        "dir"
+      ],
+      "icon": "assets/icon.icns"
     },
     "win": {
-      "target": [{ "target": "nsis", "arch": ["x64"] }]
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "assets/icon.ico"
     },
     "asar": true
   }

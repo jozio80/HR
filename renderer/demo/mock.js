@@ -47,6 +47,9 @@ window.horong = {
   async exportCsv() {
     return { saved: false };
   },
+  async exportXlsx() {
+    return { saved: false };
+  },
   async saveSession() {
     return { savedPath: null };
   },

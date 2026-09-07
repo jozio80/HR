@@ -62,6 +62,7 @@ function renderResults(ranked) {
   body.innerHTML = '';
   $('#empty-state').style.display = ranked.length === 0 ? 'block' : 'none';
   $('#btn-export').disabled = ranked.length === 0;
+  $('#btn-export-xlsx').disabled = ranked.length === 0;
 
   ranked.forEach((r, idx) => {
     const tr = document.createElement('tr');
@@ -149,11 +150,17 @@ async function openDetail(r) {
   const contactLine = [r.contact?.email, r.contact?.phone].filter(Boolean).join(' · ') || '연락처 자동 인식 안 됨';
 
   let rawText = '';
+  let rawTextFailed = false;
   try {
     rawText = r.filePath ? await window.horong.getResumeText(r.filePath) : '';
   } catch (e) {
-    rawText = `(원문을 다시 불러오지 못했습니다: ${e.message})`;
+    rawText = `원문을 다시 불러오지 못했습니다: ${e.message}`;
+    rawTextFailed = true;
   }
+  const preview = (rawText || '').slice(0, 4000);
+  const highlighted = rawTextFailed
+    ? escapeHtml(preview)
+    : highlightKeywords(preview, [...(r.matchedRequired || []), ...(r.matchedPreferred || [])]);
 
   body.innerHTML = `
     <div class="detail-section">
@@ -173,8 +180,8 @@ async function openDetail(r) {
       <div>${r.missingRequired.map((s) => `<span class="tag missing">✕ ${s}</span>`).join('') || '없음'}</div>
     </div>
     <div class="detail-section">
-      <h4>원문 미리보기</h4>
-      <div class="raw-text-preview">${escapeHtml(rawText).slice(0, 4000) || '(텍스트를 추출하지 못했습니다)'}</div>
+      <h4>원문 미리보기 <span class="hint">(노란색이 매칭된 키워드)</span></h4>
+      <div class="raw-text-preview">${highlighted || '(텍스트를 추출하지 못했습니다)'}</div>
     </div>
   `;
 }
@@ -184,6 +191,32 @@ function escapeHtml(str) {
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;');
+}
+
+/** 원문 미리보기에서 매칭된 필수/우대 키워드를 <mark>로 강조한다. */
+function highlightKeywords(text, keywords) {
+  const escaped = escapeHtml(text);
+  const unique = [...new Set((keywords || []).filter(Boolean))].sort((a, b) => b.length - a.length);
+  if (unique.length === 0) return escaped;
+  const pattern = unique.map((kw) => kw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
+  const re = new RegExp(`(${pattern})`, 'gi');
+  return escaped.replace(re, '<mark>$1</mark>');
+}
+
+function toRecords(ranked) {
+  return ranked.map((r, idx) => ({
+    순위: idx + 1,
+    지원자: r.candidateName || '',
+    파일명: r.fileName,
+    점수: r.score,
+    필수매칭: r.matchedRequired.join(' / '),
+    필수누락: r.missingRequired.join(' / '),
+    우대매칭: r.matchedPreferred.join(' / '),
+    추정경력: r.estimatedYears === null ? '' : r.estimatedYears,
+    학력: r.education || '',
+    이메일: r.contact?.email || '',
+    전화번호: r.contact?.phone || '',
+  }));
 }
 
 function toCsv(ranked) {
@@ -266,6 +299,12 @@ function bindEvents() {
   $('#btn-export').addEventListener('click', async () => {
     const csv = toCsv(state.lastResults);
     const res = await window.horong.exportCsv(csv, '호롱랩스_이력서스크리닝_결과.csv');
+    $('#run-status').textContent = res.saved ? `저장됨: ${res.filePath}` : '내보내기 취소됨';
+  });
+
+  $('#btn-export-xlsx').addEventListener('click', async () => {
+    const records = toRecords(state.lastResults);
+    const res = await window.horong.exportXlsx(records, '호롱랩스_이력서스크리닝_결과.xlsx');
     $('#run-status').textContent = res.saved ? `저장됨: ${res.filePath}` : '내보내기 취소됨';
   });
 

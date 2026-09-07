@@ -2,7 +2,6 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8" />
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'none';" />
 <title>호롱 이력서 스크리너 (미리보기)</title>
 <link rel="stylesheet" href="../style.css" />
 </head>
@@ -60,7 +59,10 @@
     <section class="panel results-panel">
       <div class="results-header">
         <h2>3. 결과 (점수 높은 순)</h2>
-        <button id="btn-export" class="secondary" disabled>CSV로 내보내기</button>
+        <div class="export-group">
+          <button id="btn-export-xlsx" class="secondary" disabled>엑셀로 내보내기</button>
+          <button id="btn-export" class="secondary" disabled>CSV로 내보내기</button>
+        </div>
       </div>
       <table id="results-table">
         <thead>

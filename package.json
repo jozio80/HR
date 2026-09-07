@@ -1,0 +1,49 @@
+{
+  "name": "horong-resume-screener",
+  "version": "0.1.0",
+  "description": "호롱랩스 - 이력서 1차 스크리닝 데스크톱 앱 (100% 로컬 처리, 개인정보 외부 전송 없음)",
+  "main": "main.js",
+  "author": "호롱랩스",
+  "license": "UNLICENSED",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test test/",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder"
+  },
+  "dependencies": {
+    "mammoth": "^1.12.2",
+    "pdf-parse": "^1.1.1"
+  },
+  "devDependencies": {
+    "electron": "^44.2.0",
+    "electron-builder": "^26.15.3"
+  },
+  "build": {
+    "appId": "kr.horonglabs.resume-screener",
+    "productName": "호롱 이력서 스크리너",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "src/**/*",
+      "renderer/index.html",
+      "renderer/app.js",
+      "renderer/style.css",
+      "!renderer/demo/**",
+      "!test/**",
+      "package.json"
+    ],
+    "mac": {
+      "category": "public.app-category.business",
+      "target": ["dir"]
+    },
+    "win": {
+      "target": ["nsis"]
+    },
+    "asar": true
+  }
+}

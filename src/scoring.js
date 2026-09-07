@@ -21,6 +21,56 @@ function normalize(text) {
   return (text || '').toLowerCase().replace(/\s+/g, ' ').trim();
 }
 
+// 이름으로 오인하기 쉬운 직무/문서 단어 ("OO개발자 이력서" 같은 거짓양성 방지용 블록리스트)
+const NAME_BLOCKLIST = new Set([
+  '개발자', '디자이너', '기획자', '마케터', '엔지니어', '매니저', '팀장', '대리', '과장', '부장',
+  '사원', '인턴', '신입', '경력', '지원자', '이력서', '자기소개서', '지원서', '포트폴리오',
+  '백엔드', '프론트엔드', '총무', '영업', '상담', '생산', '품질',
+]);
+
+function cleanNameCandidate(raw) {
+  const v = (raw || '').trim().replace(/\s+/g, ' ');
+  if (!v || NAME_BLOCKLIST.has(v)) return null;
+  return v;
+}
+
+/**
+ * 이력서 텍스트에서 지원자 이름을 추정한다 (휴리스틱, 100% 확신 아님).
+ * 우선순위: 1) "성명: 홍길동" 같은 명시적 라벨 2) "홍길동 이력서" 같은 문서제목형
+ * 3) 영문 "John Kim Resume" 형 4) 첨줄이 순수 2~4자 한글 단어 하나뿐인 경우.
+ * 이름이 아님 가능성이 높은 직무/문서 단어는 NAME_BLOCKLIST로 거러낸다.
+ */
+function extractName(text) {
+  const raw = (text || '').trim();
+  if (!raw) return null;
+
+  const labelMatch = raw.match(/(?:성\s*명|이\s*름|지원자|성함|Name)\s*[:：]\s*([가-힣]{2,4}|[A-Za-z][A-Za-z .]{1,20})/);
+  if (labelMatch) {
+    const cleaned = cleanNameCandidate(labelMatch[1]);
+    if (cleaned) return cleaned;
+  }
+
+  const titleMatch = raw.match(/^\s*([가-힣]{2,4})\s*[_\-(]?\s*(?:이력서|자기소개서|지원서|Resume|CV)/mi);
+  if (titleMatch) {
+    const cleaned = cleanNameCandidate(titleMatch[1]);
+    if (cleaned) return cleaned;
+  }
+
+  const enTitleMatch = raw.match(/^\s*([A-Z][a-zA-Z]+\s[A-Z][a-zA-Z]+)\s*[_\-]?\s*(?:Resume|CV)\b/m);
+  if (enTitleMatch) {
+    const cleaned = cleanNameCandidate(enTitleMatch[1]);
+    if (cleaned) return cleaned;
+  }
+
+  const firstLine = raw.split('\n').map((s) => s.trim()).find(Boolean);
+  if (firstLine && /^[가-힣]{2,4}$/.test(firstLine)) {
+    const cleaned = cleanNameCandidate(firstLine);
+    if (cleaned) return cleaned;
+  }
+
+  return null;
+}
+
 /** 이력서 텍스트에서 이메일/전화번호를 추출한다 (로컬 표시용, 저장/전송하지 않음). */
 function extractContact(text) {
   const t = text || '';
@@ -170,8 +220,11 @@ function scoreResume(jd, resumeText, meta = {}) {
     years: Math.round(weights.years),
   };
 
+  const candidateName = extractName(resumeText);
+
   return {
     fileName: meta.fileName || null,
+    candidateName,
     score: Math.max(0, Math.min(100, total)),
     breakdown: {
       requiredScore: Math.round(requiredScore),
@@ -203,6 +256,7 @@ module.exports = {
   extractYears,
   extractEducation,
   extractContact,
+  extractName,
   findMatches,
   normalize,
 };

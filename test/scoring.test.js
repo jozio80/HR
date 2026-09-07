@@ -8,6 +8,7 @@ const {
   extractYears,
   extractEducation,
   extractContact,
+  extractName,
   findMatches,
 } = require('../src/scoring.js');
 
@@ -123,4 +124,38 @@ test('findMatches는 대소문자를 무시하고 부분일치한다', () => {
   const { matched, missing } = findMatches('저는 REACT 전문가입니다', ['react', 'vue']);
   assert.deepEqual(matched, ['react']);
   assert.deepEqual(missing, ['vue']);
+});
+
+test('"성명: 홍길동" 명시적 라벨에서 이름을 추출한다', () => {
+  assert.equal(extractName('성명: 홍길동\n연락처: 010-1234-5678'), '홍길동');
+});
+
+test('"이름 : 김철수" 첨줄도 처리한다', () => {
+  assert.equal(extractName('이름 : 김철수'), '김철수');
+});
+
+test('"홍길동 이력서" 문서제목형에서 이름을 추출한다', () => {
+  assert.equal(extractName('홍길동 이력서\n연락처: hong@example.com'), '홍길동');
+});
+
+test('영문 "John Kim Resume" 패턴에서 이름을 추출한다', () => {
+  assert.equal(extractName('John Kim Resume\nEmail: john@example.com'), 'John Kim');
+});
+
+test('첫줄이 순수 2~4자 한글 단어하나뿐이면 이름으로 추정한다', () => {
+  assert.equal(extractName('김철수\n경력사항\n...'), '김철수');
+});
+
+test('"개발자 이력서" 같이 직무명이 이름으로 오인식되지 않는다', () => {
+  assert.equal(extractName('개발자 이력서\n이름: 박영희'), '박영희');
+});
+
+test('이름 단서를 못 찾으면 null을 반환한다', () => {
+  assert.equal(extractName('안녕하세요 지원합니다. 저는 5년차 개발자입니다.'), null);
+});
+
+test('이름 정보가 scoreResume 반환값에 candidateName으로 포함된다', () => {
+  const jd = { requiredSkills: [], preferredSkills: [], minYears: null };
+  const r = scoreResume(jd, '성명: 이영희\n경력 3년차 디자이너입니다.');
+  assert.equal(r.candidateName, '이영희');
 });

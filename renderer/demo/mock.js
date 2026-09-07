@@ -24,6 +24,13 @@ window.horong = {
   async selectResumeFiles() {
     return window.__SAMPLE_RESUMES__.map((r) => r.filePath);
   },
+  async selectResumeFolder() {
+    return {
+      filePaths: window.__SAMPLE_RESUMES__.map((r) => r.filePath),
+      folderPath: '/Users/demo/Desktop/이력서',
+      truncated: false,
+    };
+  },
   async extractAndScore(jd, filePaths) {
     const resumes = filePaths.map((fp) => window.__SAMPLE_RESUMES__.find((r) => r.filePath === fp));
     const ranked = window.HorongScoring.rankResumes(jd, resumes);

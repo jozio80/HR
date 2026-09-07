@@ -23,15 +23,30 @@ function readJdFromForm() {
   return { title, requiredSkills, preferredSkills, minYears };
 }
 
+function addFiles(paths) {
+  const set = new Set(state.selectedFiles);
+  for (const p of paths) set.add(p);
+  state.selectedFiles = Array.from(set);
+  renderFileList();
+}
+
 function renderFileList() {
   const list = $('#file-list');
   list.innerHTML = '';
   for (const fp of state.selectedFiles) {
     const li = document.createElement('li');
     const name = fp.split(/[\\/]/).pop();
-    li.textContent = name;
+    const dir = fp.slice(0, fp.length - name.length);
+    const nameSpan = document.createElement('span');
+    nameSpan.textContent = name;
+    const pathSpan = document.createElement('span');
+    pathSpan.className = 'file-path';
+    pathSpan.textContent = dir;
+    li.appendChild(nameSpan);
+    li.appendChild(pathSpan);
     list.appendChild(li);
   }
+  $('#file-count-label').textContent = `선택된 파일 ${state.selectedFiles.length}개`;
   $('#btn-run').disabled = state.selectedFiles.length === 0;
 }
 
@@ -56,7 +71,15 @@ function renderResults(ranked) {
     tr.appendChild(tdRank);
 
     const tdName = document.createElement('td');
-    tdName.textContent = r.fileName;
+    tdName.className = 'candidate-cell';
+    const nameEl = document.createElement('span');
+    nameEl.className = 'candidate-name';
+    nameEl.textContent = r.candidateName || '(이름 미확인)';
+    const fileEl = document.createElement('span');
+    fileEl.className = 'candidate-file';
+    fileEl.textContent = r.fileName;
+    tdName.appendChild(nameEl);
+    tdName.appendChild(fileEl);
     tr.appendChild(tdName);
 
     const tdScore = document.createElement('td');
@@ -118,7 +141,7 @@ function tagGroup(items, kind) {
 }
 
 async function openDetail(r) {
-  $('#detail-filename').textContent = r.fileName;
+  $('#detail-filename').textContent = r.candidateName ? `${r.candidateName} (${r.fileName})` : r.fileName;
   const body = $('#detail-body');
   body.innerHTML = '<p class="hint">원문 불러오는 중…</p>';
   $('#detail-modal').classList.remove('hidden');
@@ -164,11 +187,12 @@ function escapeHtml(str) {
 }
 
 function toCsv(ranked) {
-  const header = ['순위', '파일명', '점수', '필수매칭', '필수누락', '우대매칭', '추정경력', '학력', '이메일', '전화번호'];
+  const header = ['순위', '지원자', '파일명', '점수', '필수매칭', '필수누락', '우대매칭', '추정경력', '학력', '이메일', '전화번호'];
   const lines = [header.join(',')];
   ranked.forEach((r, idx) => {
     const row = [
       idx + 1,
+      r.candidateName || '',
       r.fileName,
       r.score,
       r.matchedRequired.join(' / '),
@@ -199,10 +223,27 @@ async function refreshSessionList() {
 function bindEvents() {
   $('#btn-select-files').addEventListener('click', async () => {
     const files = await window.horong.selectResumeFiles();
-    if (files.length) {
-      state.selectedFiles = files;
-      renderFileList();
+    if (files.length) addFiles(files);
+  });
+
+  $('#btn-select-folder').addEventListener('click', async () => {
+    const { filePaths, folderPath, truncated } = await window.horong.selectResumeFolder();
+    if (!folderPath) return;
+    if (filePaths.length) {
+      addFiles(filePaths);
+      const dirName = folderPath.split(/[\\/]/).pop();
+      $('#run-status').textContent = truncated
+        ? `"${dirName}" 폴더에서 ${filePaths.length}건까지만 불러왔습니다 (담기 개수 제한). 하위 폴더를 나눠서 다시 시도해주세요.`
+        : `"${dirName}" 폴더에서 이력서 ${filePaths.length}건 찾음`;
+    } else {
+      $('#run-status').textContent = `선택한 폴더에서 PDF/DOCX/TXT 파일을 찾지 못했습니다.`;
     }
+  });
+
+  $('#btn-clear-files').addEventListener('click', () => {
+    state.selectedFiles = [];
+    renderFileList();
+    $('#run-status').textContent = '';
   });
 
   $('#btn-run').addEventListener('click', async () => {

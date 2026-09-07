@@ -76,6 +76,45 @@ ipcMain.handle('select-resume-files', async () => {
   return result.filePaths;
 });
 
+const MAX_FOLDER_SCAN_FILES = 500;
+const MAX_FOLDER_SCAN_DEPTH = 4;
+
+/** 폴더(하위폴더 포함)를 재귀적으로 둔어 지원 확장자 파일만 모은다. 숨김파일/폴더(.으로 시작)는 제외한다. */
+async function scanResumeFolder(dirPath, depth = 0, results = []) {
+  if (depth > MAX_FOLDER_SCAN_DEPTH || results.length >= MAX_FOLDER_SCAN_FILES) return results;
+  let entries;
+  try {
+    entries = await fs.readdir(dirPath, { withFileTypes: true });
+  } catch {
+    return results;
+  }
+  for (const entry of entries) {
+    if (entry.name.startsWith('.')) continue;
+    const full = path.join(dirPath, entry.name);
+    if (entry.isDirectory()) {
+      await scanResumeFolder(full, depth + 1, results);
+    } else if (entry.isFile()) {
+      const ext = path.extname(entry.name).toLowerCase();
+      if (SUPPORTED_EXTENSIONS.includes(ext)) results.push(full);
+    }
+    if (results.length >= MAX_FOLDER_SCAN_FILES) break;
+  }
+  return results;
+}
+
+ipcMain.handle('select-resume-folder', async () => {
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: '이력서 폴더 선택 (하위 폴더까지 자동으로 찾습니다)',
+    properties: ['openDirectory'],
+  });
+  if (result.canceled || result.filePaths.length === 0) {
+    return { filePaths: [], folderPath: null, truncated: false };
+  }
+  const folderPath = result.filePaths[0];
+  const filePaths = await scanResumeFolder(folderPath);
+  return { filePaths, folderPath, truncated: filePaths.length >= MAX_FOLDER_SCAN_FILES };
+});
+
 ipcMain.handle('extract-and-score', async (_event, { jd, filePaths }) => {
   const extracted = [];
   const errors = [];
